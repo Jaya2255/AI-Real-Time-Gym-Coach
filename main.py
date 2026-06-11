@@ -203,20 +203,20 @@ def main():
             mode=WebRtcMode.SENDRECV,
             video_processor_factory=VideoProcessorClass,
             rtc_configuration={
-        "iceServers": [
-            {"urls": ["stun:stun.l.google.com:19302"]},
-             {
-                    "urls": [
-                        "turn:openrelay.metered.ca:80",
-                        "turn:openrelay.metered.ca:443",
-                        "turn:openrelay.metered.ca:443?transport=tcp",
-                        "turns:openrelay.metered.ca:443?transport=tcp"
-                    ],
-                    "username": "openrelayproject",
-                    "credential": "openrelayproject"
-                }
-        ]
-    },
+                "iceServers": [
+                    {"urls": ["stun:stun.l.google.com:19302"]},
+                    {
+                        "urls": [
+                            "turn:openrelay.metered.ca:80",
+                            "turn:openrelay.metered.ca:443",
+                            "turn:openrelay.metered.ca:443?transport=tcp",
+                            "turns:openrelay.metered.ca:443?transport=tcp"
+                        ],
+                        "username": "openrelayproject",
+                        "credential": "openrelayproject"
+                    }
+                ]
+            },
             media_stream_constraints={
                 "video": True,
                 "audio": False
@@ -224,8 +224,19 @@ def main():
             async_processing=True
         )
 
+        # ─── THE MISSING LINK (ADD THIS NOW) ────────────────────────────────────
+        # Pass the active exercise type to the background vision processing thread
+        if context.video_processor:
+            context.video_processor.set_exercise(exercise)
+        # ────────────────────────────────────────────────────────────────────────
+
         sync_metrics_update(context)
 
+        if context.state.playing:
+            time.sleep(0.25)
+            st.rerun()
+
+        inject_webrtc_styles()
         if context.state.playing:
             time.sleep(0.25)
             st.rerun()

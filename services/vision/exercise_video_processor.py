@@ -189,44 +189,51 @@ class VideoProcessorClass(VideoProcessorBase):
         )
 
     def recv(self, frame):
-        image = np.asarray(
-            cv2.flip(frame.to_ndarray(format="bgr24"), 1),
-            dtype=np.uint8
-        )
+        try:
+            image = np.asarray(
+                cv2.flip(frame.to_ndarray(format="bgr24"), 1),
+                dtype=np.uint8
+            )
 
-        mp_image = mp.Image(
-            image_format=mp.ImageFormat.SRGB,
-            data=cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-        )
+            mp_image = mp.Image(
+                image_format=mp.ImageFormat.SRGB,
+                data=cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+            )
 
-        self._frame_timestamps_ms += 30
-        result = self._landmarker.detect_for_video(mp_image, self._frame_timestamps_ms)
+            self._frame_timestamps_ms += 30
+            result = self._landmarker.detect_for_video(mp_image, self._frame_timestamps_ms)
 
-        if result.pose_landmarks:
-            landmarks = result.pose_landmarks[0]
+            if result.pose_landmarks:
+                landmarks = result.pose_landmarks[0]
 
-            self._draw_skeleton(image, landmarks)
+                self._draw_skeleton(image, landmarks)
 
-            ex_type = self.get_exercise()
+                ex_type = self.get_exercise()
 
-            detector = self._detectors.get(ex_type)
+                detector = self._detectors.get(ex_type)
 
-            if detector:
-                metrics = detector.process(landmarks)
+                if detector:
+                    metrics = detector.process(landmarks)
 
-                metrics["pose_detected"] = True
+                    metrics["pose_detected"] = True
 
-                self._draw_overlays(image, metrics, ex_type)
+                    self._draw_overlays(image, metrics, ex_type)
 
-                self.set_latest_metrics(metrics)
-        else:
-            self._draw_no_pose_warnings(image)
-            
-            with self._lock:
-                if self._latest_metrics is not None:
-                    self._latest_metrics["pose_detected"] = False
-                else:
-                    self._latest_metrics = {"pose_detected": False}
+                    self.set_latest_metrics(metrics)
+            else:
+                self._draw_no_pose_warnings(image)
+                
+                with self._lock:
+                    if self._latest_metrics is not None:
+                        self._latest_metrics["pose_detected"] = False
+                    else:
+                        self._latest_metrics = {"pose_detected": False}
 
-        return av.VideoFrame.from_ndarray(image, format="bgr24")
+            return av.VideoFrame.from_ndarray(image, format="bgr24")
+
+        except Exception as e:
+            # Catch any hidden cloud array errors and print them to the logs
+            print(f"⚠️ INTERNAL VIDEO THREAD ERROR: {e}")
+            # Return the raw frame untouched so the camera container NEVER goes blank
+            return frame
     

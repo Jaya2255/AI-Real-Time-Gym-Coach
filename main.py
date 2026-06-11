@@ -16,6 +16,61 @@ from services.coaching.llm import LLMCoach
 from services.coaching.tts import TextToSpeech
 from services.coaching.voice_pipeline import VoicePipeline, autoplay_audio
 
+# ─── LIVE SIDEBAR METRICS FRAGMENT ENGINE ─────────────────────────────────────
+# This isolates the numerical updates so they refresh every 0.5s without flashing the camera container.
+@st.fragment(run_every=0.5)
+def render_sidebar_metrics(exercise):
+    st.subheader("Progress")
+    
+    # Safely extract the active WebRTC context from session state
+    context = st.session_state.get("web_rtc_context", None)
+    latest = None
+    
+    if context and hasattr(context, "video_processor") and context.video_processor:
+        try:
+            sync_metrics_update(context)
+            latest = context.video_processor.get_latest_metrics()
+        except Exception:
+            latest = None
+
+    if latest is None:
+        latest = {}
+
+    # Display standard progress metrics
+    st.metric("Total Reps", f"{latest.get('reps', 0)}")
+    st.metric("Current Set Reps", f"{st.session_state.get('current_set_reps', 0)} / {st.session_state.get('reps_per_set', 0)}")
+    st.metric("Sets Completed", f"{st.session_state.get('sets_completed', 0)} / {st.session_state.get('target_sets', 0)}")
+
+    st.divider()
+    st.subheader(f"{exercise} Metrics")
+
+    # Display dynamic angle metrics based on active exercise selection
+    if exercise == "Squats":
+        st.metric("Knee Angle", f"{latest.get('knee_angle', 0)}°")
+        st.metric("Back Angle", f"{latest.get('back_angle', 0)}°")
+        st.metric("Depth Status", latest.get('depth_status', 'N/A'))
+        
+    elif exercise == "Push-ups":
+        st.metric("Elbow Angle", f"{latest.get('elbow_angle', 0)}°")
+        st.metric("Body Alignment", latest.get('body_alignment', 'N/A'))
+        st.metric("Hip Position", latest.get('hip_status', 'N/A'))
+        
+    elif exercise == "Biceps Curls (Dumbbell)":
+        st.metric("Elbow Angle", f"{latest.get('elbow_angle', 0)}°")
+        st.metric("Shoulder Stability", latest.get('shoulder_status', 'N/A'))
+        st.metric("Swing Detection", latest.get('swing_status', 'N/A'))
+        
+    elif exercise == "Shoulder Press":
+        st.metric("Elbow Angle", f"{latest.get('elbow_angle', 0)}°")
+        st.metric("Arm Extension", latest.get('extension_status', 'N/A'))
+        st.metric("Back Arch", latest.get('back_arch_status', 'N/A'))
+        
+    elif exercise == "Lunges":
+        st.metric("Front Knee Angle", f"{latest.get('front_knee_angle', 0)}°")
+        st.metric("Torso Angle", f"{latest.get('torso_angle', 0)}°")
+        st.metric("Balance Status", latest.get('balance_status', 'N/A'))
+
+
 def main():
     st.set_page_config(
         page_icon="🏋️‍♀️",
@@ -106,21 +161,10 @@ def main():
                         st.session_state.audio_to_play, st.session_state.coach_feedback = result
                 st.rerun()
 
-        # METRICS CONTAINER
+        # Safely invoke the live refreshing sidebar section if a session is underway
         if workout_started:
             st.divider()
-            exercise = st.session_state.get("exercise_type")
-            
-            st.subheader("Progress")
-            reps_placeholder = st.empty()
-            set_reps_placeholder = st.empty()
-            sets_placeholder = st.empty()
-
-            st.divider()
-            st.subheader(f"{exercise} Metrics")
-            metric_placeholder_1 = st.empty()
-            metric_placeholder_2 = st.empty()
-            metric_placeholder_3 = st.empty()
+            render_sidebar_metrics(exercise)
 
     st.title("AI Real-time GYM Coach")
     st.markdown("#### Real-time pose detection with proactive AI voice coaching")
@@ -143,7 +187,7 @@ def main():
             unsafe_allow_html=True,
         )
     else:
-        # CAMERA STREAM CONTAINER (Stays completely uninterrupted)
+        # CAMERA STREAM CONTAINER (Maintains solid connections using OpenRelay network tunnels)
         context = webrtc_streamer(
             key="exercise-analysis",
             mode=WebRtcMode.SENDRECV,
@@ -167,41 +211,12 @@ def main():
             async_processing=True
         )
 
-        # Sync the chosen dropdown exercise to the active vision loop
+        # Synchronize parameters with the machine learning worker thread
         if context.video_processor:
             context.video_processor.set_exercise(exercise)
 
-        # Dynamic browser UI updates that DO NOT disrupt or rerun the webcam layout
-        sync_metrics_update(context)
-        
-        # Pull live telemetry data seamlessly from the active processor thread
-        if context.video_processor:
-            latest = context.video_processor.get_latest_metrics()
-            if latest:
-                reps_placeholder.metric("Total Reps", f"{latest.get('reps', 0)}")
-                set_reps_placeholder.metric("Current Set Reps", f"{st.session_state.get('current_set_reps', 0)} / {st.session_state.get('reps_per_set', 0)}")
-                sets_placeholder.metric("Sets Completed", f"{st.session_state.get('sets_completed', 0)} / {st.session_state.get('target_sets', 0)}")
-
-                if exercise == "Squats":
-                    metric_placeholder_1.metric("Knee Angle", f"{latest.get('knee_angle', 0)}°")
-                    metric_placeholder_2.metric("Back Angle", f"{latest.get('back_angle', 0)}°")
-                    metric_placeholder_3.metric("Depth Status", latest.get('depth_status', 'N/A'))
-                elif exercise == "Push-ups":
-                    metric_placeholder_1.metric("Elbow Angle", f"{latest.get('elbow_angle', 0)}°")
-                    metric_placeholder_2.metric("Body Alignment", latest.get('body_alignment', 'N/A'))
-                    metric_placeholder_3.metric("Hip Position", latest.get('hip_status', 'N/A'))
-                elif exercise == "Biceps Curls (Dumbbell)":
-                    metric_placeholder_1.metric("Elbow Angle", f"{latest.get('elbow_angle', 0)}°")
-                    metric_placeholder_2.metric("Shoulder Stability", latest.get('shoulder_status', 'N/A'))
-                    metric_placeholder_3.metric("Swing Detection", latest.get('swing_status', 'N/A'))
-                elif exercise == "Shoulder Press":
-                    metric_placeholder_1.metric("Elbow Angle", f"{latest.get('elbow_angle', 0)}°")
-                    metric_placeholder_2.metric("Arm Extension", latest.get('extension_status', 'N/A'))
-                    metric_placeholder_3.metric("Back Arch", latest.get('back_arch_status', 'N/A'))
-                elif exercise == "Lunges":
-                    metric_placeholder_1.metric("Front Knee Angle", f"{latest.get('front_knee_angle', 0)}°")
-                    metric_placeholder_2.metric("Torso Angle", f"{latest.get('torso_angle', 0)}°")
-                    metric_placeholder_3.metric("Balance Status", latest.get('balance_status', 'N/A'))
+        # Save context references globally so the sidebar fragment can view telemetry
+        st.session_state.web_rtc_context = context
 
         inject_webrtc_styles()
 
